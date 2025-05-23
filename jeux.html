@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChronoHack - Jeu de hacking temporel</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    body {
+      font-family: 'Courier New', monospace;
+      background-color: #0d0d0d;
+      color: #00ffcc;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100vh;
+      justify-content: center;
+      padding: 10px;
+    }
+    canvas {
+      background: radial-gradient(ellipse at center, #1a1a1a 0%, #000 100%);
+      border: 2px solid #00ffcc;
+      width: 100%;
+      max-width: 800px;
+      height: 600px;
+      display: block;
+    }
+    #hud {
+      margin-top: 10px;
+      font-size: 14px;
+      background: rgba(0, 255, 204, 0.1);
+      padding: 10px;
+      border: 1px solid #00ffcc;
+      max-width: 800px;
+      width: 100%;
+      text-align: center;
+      user-select: none;
+    }
+    #hud p {
+      margin: 4px 0;
+    }
+    #controls {
+      margin-top: 15px;
+      max-width: 800px;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      user-select: none;
+    }
+    button.control-btn {
+      background: #002b2b;
+      border: 2px solid #00ffcc;
+      color: #00ffcc;
+      font-size: 18px;
+      padding: 15px 20px;
+      border-radius: 6px;
+      flex: 1 1 80px;
+      min-width: 60px;
+      transition: background 0.3s;
+      touch-action: manipulation;
+    }
+    button.control-btn:active {
+      background: #005050;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="hud">
+    <p>🕒 Temps: <span id="time">0.00</span>s</p>
+    <p>Flèches / boutons pour bouger | Espace / bouton REWIND pour rembobiner | R / RESET pour reset</p>
+  </div>
+  <div id="controls">
+    <button class="control-btn" data-key="ArrowUp">↑</button>
+    <button class="control-btn" data-key="ArrowLeft">←</button>
+    <button class="control-btn" data-key="ArrowDown">↓</button>
+    <button class="control-btn" data-key="ArrowRight">→</button>
+    <button class="control-btn" id="rewindBtn">REWIND</button>
+    <button class="control-btn" id="resetBtn">RESET</button>
+  </div>
+
+  <script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const timeDisplay = document.getElementById('time');
+
+  let lastTime = performance.now();
+  let gameTime = 0;
+
+  const player = {
+    x: 100,
+    y: 100,
+    size: 20,
+    color: '#00ffcc',
+    speed: 2,
+  };
+
+  const keys = {};
+  const level = [
+    { x: 300, y: 300, w: 100, h: 20 },
+    { x: 450, y: 250, w: 20, h: 100 },
+  ];
+
+  const rewindStack = [];
+  const MAX_REWIND_FRAMES = 300;
+  let isRewinding = false;
+
+  function update(delta) {
+    if (isRewinding && rewindStack.length > 0) {
+      const lastPos = rewindStack.pop();
+      player.x = lastPos.x;
+      player.y = lastPos.y;
+    } else if (!isRewinding) {
+      rewindStack.push({ x: player.x, y: player.y });
+      if (rewindStack.length > MAX_REWIND_FRAMES) rewindStack.shift();
+
+      if (keys.ArrowUp) player.y -= player.speed;
+      if (keys.ArrowDown) player.y += player.speed;
+      if (keys.ArrowLeft) player.x -= player.speed;
+      if (keys.ArrowRight) player.x += player.speed;
+
+      gameTime += delta / 1000;
+      timeDisplay.textContent = gameTime.toFixed(2);
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw player
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.size, player.size);
+
+    // Draw obstacles
+    ctx.fillStyle = '#ff0077';
+    level.forEach((obj) => {
+      ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+    });
+
+    // Rewind effect
+    if (isRewinding) {
+      ctx.fillStyle = 'rgba(0,255,204,0.1)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  function gameLoop(timestamp) {
+    const delta = timestamp - lastTime;
+    lastTime = timestamp;
+
+    update(delta);
+    draw();
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  function resetGame() {
+    Object.assign(player, { x: 100, y: 100 });
+    gameTime = 0;
+    rewindStack.length = 0;
+    isRewinding = false;
+    Object.keys(keys).forEach((key) => (keys[key] = false));
+  }
+
+  // Event listeners for keyboard
+  document.addEventListener('keydown', (e) => {
+    if (e.key === ' ') isRewinding = true;
+    else if (e.key === 'r' || e.key === 'R') resetGame();
+    else keys[e.key] = true;
+  });
+
+  document.addEventListener('keyup', (e) => {
+    if (e.key === ' ') isRewinding = false;
+    else keys[e.key] = false;
+  });
+
+  // Event listeners for buttons
+  document.querySelectorAll('.control-btn').forEach((btn) => {
+    const key = btn.dataset.key || btn.id;
+
+    btn.addEventListener('mousedown', () => {
+      if (key === 'rewindBtn') isRewinding = true;
+      else if (key === 'resetBtn') resetGame();
+      else keys[key] = true;
+    });
+
+    btn.addEventListener('mouseup', () => {
+      if (key === 'rewindBtn') isRewinding = false;
+      else keys[key] = false;
+    });
+
+    btn.addEventListener('mouseleave', () => {
+      if (key !== 'rewindBtn') keys[key] = false;
+    });
+  });
+
+  requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
